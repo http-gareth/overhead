@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#04060d">
+  <title>Overhead</title>
+  <link rel="icon" href="web/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="web/style.css">
+</head>
+<body>
+  <canvas id="globe" aria-label="A 3D globe with live satellites, planes, earthquakes, volcanoes, launches and aurora"></canvas>
+  <div id="tag" class="tag" hidden></div>
+  <div id="tag-from" class="tag airport" hidden></div>
+  <div id="tag-to" class="tag airport" hidden></div>
+  <div id="tag-you" class="tag you" hidden>You</div>
+
+  <header class="top">
+    <div class="brand">
+      <h1>Overhead</h1>
+      <p>Everything above and below you, live, on one Earth.</p>
+    </div>
+    <div class="layers" role="group" aria-label="Show on the globe">
+      <button type="button" data-layer="satellites" aria-pressed="true"><i class="swatch satellites"></i>Satellites <b>…</b></button>
+      <button type="button" data-layer="planes" aria-pressed="true"><i class="swatch planes"></i>Planes <b>…</b></button>
+      <button type="button" data-layer="quakes" aria-pressed="true"><i class="swatch quakes"></i>Quakes <b>…</b></button>
+      <button type="button" data-layer="volcanoes" aria-pressed="true"><i class="swatch volcanoes"></i>Volcanoes <b>…</b></button>
+      <button type="button" data-layer="launches" aria-pressed="true"><i class="swatch launches"></i>Launches <b>…</b></button>
+      <button type="button" data-layer="aurora" aria-pressed="true"><i class="swatch aurora"></i>Aurora <b>…</b></button>
+    </div>
+    <div class="time">
+      <span id="clock" class="clock"></span>
+      <div class="speeds" role="group" aria-label="Time speed">
+        <button type="button" data-speed="1" aria-pressed="true">Live</button>
+        <button type="button" data-speed="60" aria-pressed="false">×60</button>
+        <button type="button" data-speed="600" aria-pressed="false">×600</button>
+      </div>
+      <div class="speeds" role="group" aria-label="Earth style">
+        <button type="button" data-style="photo" aria-pressed="true">Photo</button>
+        <button type="button" data-style="map" aria-pressed="false">Map</button>
+      </div>
+    </div>
+  </header>
+
+  <aside class="panel" aria-label="Details">
+    <nav class="tabs" role="tablist">
+      <button type="button" role="tab" data-tab="above" aria-selected="true">Above you</button>
+      <button type="button" role="tab" data-tab="satellites" aria-selected="false">Satellites</button>
+      <button type="button" role="tab" data-tab="planes" aria-selected="false">Planes</button>
+      <button type="button" role="tab" data-tab="earth" aria-selected="false">Earth</button>
+      <button type="button" role="tab" data-tab="launches" aria-selected="false">Launches</button>
+      <button type="button" role="tab" data-tab="stats" aria-selected="false">Stats</button>
+    </nav>
+
+    <section id="tab-above" class="tab" role="tabpanel">
+      <div class="where">
+        <p id="observer" class="observer"></p>
+        <button type="button" id="locate" class="pill">Use my location</button>
+      </div>
+      <div id="above-stats" class="stats"></div>
+      <h3>Your sky right now</h3>
+      <canvas id="sky" class="sky" aria-label="Your sky: the centre is straight up, the edge is the horizon, north at the top. Tap a dot to open it."></canvas>
+      <p class="fine sky-key"><i class="dot station"></i>Space station <i class="dot starlink"></i>Satellite <i class="ramp short"></i>Plane <i class="dot sun"></i>Sun. Centre is straight up, edge is the horizon.</p>
+      <h3>Bright satellites you can see tonight</h3>
+      <ol id="above-bright" class="rows"></ol>
+      <h3>Space station passes over you</h3>
+      <ol id="above-passes" class="rows"></ol>
+      <h3>Highest satellites right now</h3>
+      <ol id="above-sats" class="rows"></ol>
+      <h3>Planes nearest you</h3>
+      <ol id="above-planes" class="rows"></ol>
+      <p class="fine">Your location never leaves this device. "Look up" means the satellite is sunlit while your sky is dark, so you can see it with your own eyes.</p>
+    </section>
+
+    <section id="tab-satellites" class="tab" role="tabpanel" hidden>
+      <input id="sat-search" type="search" placeholder="Search: ISS, Hubble, Starlink, GPS…" autocomplete="off" aria-label="Search satellites">
+      <div id="sat-groups" class="chips" role="group" aria-label="Satellite type"></div>
+      <p id="sat-status" class="status"></p>
+      <ol id="sat-list" class="rows"></ol>
+    </section>
+
+    <section id="tab-planes" class="tab" role="tabpanel" hidden>
+      <input id="plane-search" type="search" placeholder="Search: flight callsign or country" autocomplete="off" aria-label="Search planes">
+      <p id="plane-status" class="status"></p>
+      <ol id="plane-list" class="rows"></ol>
+    </section>
+
+    <section id="tab-earth" class="tab" role="tabpanel" hidden>
+      <div class="chips" role="group" aria-label="Show">
+        <button type="button" data-earth="quakes" aria-pressed="true">Earthquakes</button>
+        <button type="button" data-earth="volcanoes" aria-pressed="false">Volcanoes</button>
+        <button type="button" data-earth="space" aria-pressed="false">Space weather</button>
+      </div>
+      <div id="earth-quakes" class="section">
+        <p id="status" class="status live">Loading live data…</p>
+        <div id="filters" class="chips" role="group" aria-label="Minimum magnitude"></div>
+        <ol id="quakes" class="rows"></ol>
+      </div>
+      <div id="earth-volcanoes" class="section" hidden>
+        <p id="volcano-status" class="status"></p>
+        <ol id="volcanoes" class="rows"></ol>
+      </div>
+      <div id="earth-space" class="section" hidden>
+        <div id="space-weather"></div>
+      </div>
+    </section>
+
+    <section id="tab-launches" class="tab" role="tabpanel" hidden>
+      <p id="launch-status" class="status"></p>
+      <ol id="launch-list" class="rows"></ol>
+    </section>
+
+    <section id="tab-stats" class="tab" role="tabpanel" hidden>
+      <div id="stats-body" class="section"></div>
+    </section>
+  </aside>
+
+  <section id="card" class="card" hidden aria-live="polite"></section>
+
+  <footer class="legend">
+    <span data-legend="satellites"><i class="dot station"></i>Stations <i class="dot starlink"></i>Starlink <i class="dot navigation"></i>Navigation <i class="dot geo"></i>Geostationary <i class="dot other"></i>Other</span>
+    <span data-legend="planes"><i class="ramp"></i>Planes: ground to 12 km</span>
+    <span data-legend="quakes"><i class="dot shallow"></i>Shallow <i class="dot intermediate"></i>Intermediate <i class="dot deep"></i>Deep quake</span>
+    <span data-legend="volcanoes"><i class="shape volcano"></i>Erupting volcano</span>
+    <span data-legend="launches"><i class="shape launch"></i>Launch pad</span>
+    <span class="sources">Data: CelesTrak · The OpenSky Network · adsbdb · USGS · Smithsonian GVP · NOAA SWPC · The Space Devs · NASA GIBS · Sentinel-2 cloudless by EOX (contains modified Copernicus Sentinel data) · Street level: Esri, Vantor, Earthstar Geographics, and the GIS User Community · Natural Earth</span>
+  </footer>
+
+  <script type="module" src="web/app.ts"></script>
+</body>
+</html>

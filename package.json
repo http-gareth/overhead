@@ -1,0 +1,15 @@
+{
+  "name": "overhead",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A live 3D Earth: real earthquakes, satellites and planes, and what's above you right now.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --experimental-strip-types --disable-warning=ExperimentalWarning server/index.ts",
+    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test \"test/*.test.ts\""
+  }
+}
