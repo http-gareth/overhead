@@ -93,3 +93,18 @@ test('satellites are sorted into groups people recognise', () => {
   assert.equal(kind('INTELSAT 901', 1436, 0.1), 'Geostationary')
   assert.equal(kind('HST'), 'Other')
 })
+
+test('the Moon and stars are where the almanac puts them', async () => {
+  const { STARS, horizontal, moon } = await import('../src/sky.ts')
+  assert.ok(moon(Date.UTC(2024, 3, 8, 18, 21)).lit < 0.02, 'new Moon on the day of the April 2024 eclipse')
+  assert.ok(moon(Date.UTC(2024, 3, 23, 23, 49)).lit > 0.98, 'full Moon two weeks later')
+  const polaris = STARS.find(([name]) => name === 'Polaris')!
+  const london = { lat: 51.5, lon: -0.13 }
+  for (const hour of [0, 6, 12, 18]) {
+    const { elevation } = horizontal(polaris[1] * 15, polaris[2], london, Date.UTC(2026, 10, 5, hour))
+    assert.ok(Math.abs(elevation - london.lat) < 1, `Polaris sits at your latitude: ${elevation}`)
+  }
+  const acrux = STARS.find(([name]) => name.startsWith('Acrux'))!
+  const sky = horizontal(acrux[1] * 15, acrux[2], DURBAN, Date.UTC(2026, 4, 1, 20))
+  assert.ok(sky.elevation > 30 && sky.azimuth > 120 && sky.azimuth < 240, `Southern Cross high in the south on a May evening: ${JSON.stringify(sky)}`)
+})

@@ -58,6 +58,7 @@
         <p id="observer" class="observer"></p>
         <button type="button" id="locate" class="pill">Use my location</button>
       </div>
+      <button type="button" id="ar-open" class="pill ar-open">Point your phone at the sky</button>
       <div id="above-stats" class="stats"></div>
       <h3>Your sky right now</h3>
       <canvas id="sky" class="sky" aria-label="Your sky: the centre is straight up, the edge is the horizon, north at the top. Tap a dot to open it."></canvas>
@@ -117,6 +118,16 @@
   </aside>
 
   <section id="card" class="card" hidden aria-live="polite"></section>
+
+  <section id="ar" class="ar" hidden aria-label="Sky view">
+    <video id="ar-video" autoplay playsinline muted></video>
+    <canvas id="ar-canvas"></canvas>
+    <div class="ar-top">
+      <p id="ar-status">Point your phone at the sky</p>
+      <button type="button" id="ar-close" class="pill">Close</button>
+    </div>
+    <p id="ar-pick" class="ar-pick"></p>
+  </section>
 
   <footer class="legend">
     <span data-legend="satellites"><i class="dot station"></i>Stations <i class="dot starlink"></i>Starlink <i class="dot navigation"></i>Navigation <i class="dot geo"></i>Geostationary <i class="dot other"></i>Other</span>

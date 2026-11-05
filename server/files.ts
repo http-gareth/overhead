@@ -22,7 +22,7 @@ export const securityHeaders = (https: boolean): OutgoingHttpHeaders => ({
   'x-frame-options': 'DENY',
   'cross-origin-opener-policy': 'same-origin',
   'cross-origin-resource-policy': 'same-origin',
-  'permissions-policy': 'camera=(), microphone=(), payment=(), usb=(), geolocation=(self)'
+  'permissions-policy': 'camera=(self), microphone=(), payment=(), usb=(), geolocation=(self), accelerometer=(self), gyroscope=(self), magnetometer=(self)'
 })
 
 export const isHttps = (req: IncomingMessage) => Boolean(process.env.TRUST_PROXY) && req.headers['x-forwarded-proto'] === 'https'
