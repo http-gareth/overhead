@@ -778,6 +778,7 @@ const loadPlaneDetail = async (plane: Plane) => {
 }
 
 const select = (chosen: Selection) => {
+  if (chosen && phone.matches && sheet === 0) setSheet(1)
   selection = chosen
   selectedPasses = null
   following = chosen !== null && (chosen.kind === 'satellite' || chosen.kind === 'plane')
@@ -802,26 +803,29 @@ const fetchFeed = async (path: string, cache: RequestCache = 'no-store') => {
 const loadJson = async (path: string) => (await fetchFeed(path)).response.json()
 const loadBitmap = async (path: string) => createImageBitmap(await (await fetchFeed(path, 'default')).response.blob())
 
+const groundAt = (ndcX: number, ndcY: number, rows = viewMatrix(view)) => {
+  const ray = [ndcX * TAN_HALF_FOV * canvas.clientWidth / canvas.clientHeight, ndcY * TAN_HALF_FOV, -1]
+  const length = Math.hypot(...ray)
+  const [x, y, z] = ray.map(v => v / length)
+  const b = view.distance * z
+  const h = b * b - view.distance ** 2 + 1
+  if (h < 0) return null
+  const t = -b - Math.sqrt(h)
+  const hit = [x * t, y * t, view.distance + z * t]
+  return toLatLon([0, 1, 2].map(k => rows[0][k] * hit[0] + rows[1][k] * hit[1] + rows[2][k] * hit[2]) as Vec3)
+}
+
 const visibleBox = () => {
   if (view.distance > DETAIL_FROM) return null
   const rows = viewMatrix(view)
-  const aspect = canvas.clientWidth / canvas.clientHeight
   const lats: number[] = []
   const lons: number[] = []
   for (let i = 0; i <= 8; i++) {
     for (let j = 0; j <= 8; j++) {
-      const ray = [(i / 4 - 1) * TAN_HALF_FOV * aspect, (j / 4 - 1) * TAN_HALF_FOV, -1]
-      const length = Math.hypot(...ray)
-      const [x, y, z] = ray.map(v => v / length)
-      const b = view.distance * z
-      const h = b * b - view.distance ** 2 + 1
-      if (h < 0) continue
-      const t = -b - Math.sqrt(h)
-      const hit = [x * t, y * t, view.distance + z * t]
-      const world = [0, 1, 2].map(k => rows[0][k] * hit[0] + rows[1][k] * hit[1] + rows[2][k] * hit[2]) as Vec3
-      const { lat, lon } = toLatLon(world)
-      lats.push(lat)
-      lons.push(view.lon + wrapLon(lon - view.lon))
+      const ground = groundAt(i / 4 - 1, j / 4 - 1, rows)
+      if (!ground) continue
+      lats.push(ground.lat)
+      lons.push(view.lon + wrapLon(ground.lon - view.lon))
     }
   }
   if (lats.length < 81 * 0.6) return null
@@ -1129,6 +1133,7 @@ for (const node of document.querySelectorAll<HTMLButtonElement>('[data-style]'))
 
 for (const node of document.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
   node.addEventListener('click', () => {
+    if (phone.matches && sheet === 0) setSheet(1)
     tab = node.dataset.tab!
     renderTab()
   })
@@ -1209,10 +1214,48 @@ const skyObjects = (): SkyObject[] => {
   return items.filter(item => item.elevation > -1)
 }
 
-$('#ar-open').addEventListener('click', () => {
-  if (!observer.accuracy) locate(false)
-  openAr(skyObjects)
+for (const node of document.querySelectorAll('[data-ar]')) {
+  node.addEventListener('click', () => {
+    if (!observer.accuracy) locate(false)
+    openAr(skyObjects)
+  })
+}
+
+canvas.addEventListener('dblclick', event => {
+  const box = canvas.getBoundingClientRect()
+  const ground = groundAt((event.clientX - box.left) / box.width * 2 - 1, 1 - (event.clientY - box.top) / box.height * 2)
+  if (ground) flyTo(ground.lat, ground.lon, 1 + (view.distance - 1) / 3, 700)
 })
+
+const panel = $('.panel')
+const phone = matchMedia('(max-width: 760px)')
+const SHEETS = [92, 0.45, 0.88]
+let sheet = 1
+const sheetPixels = (state: number) => state === 0 ? SHEETS[0] : innerHeight * SHEETS[state]
+const setSheet = (state: number) => {
+  sheet = state
+  document.documentElement.style.setProperty('--sheet', `${sheetPixels(state)}px`)
+}
+let pull: { y: number, height: number, moved: number } | null = null
+const handle = $('.handle')
+handle.addEventListener('pointerdown', event => {
+  handle.setPointerCapture(event.pointerId)
+  pull = { y: event.clientY, height: panel.getBoundingClientRect().height, moved: 0 }
+})
+handle.addEventListener('pointermove', event => {
+  if (!pull) return
+  pull.moved = Math.max(pull.moved, Math.abs(event.clientY - pull.y))
+  const height = Math.max(SHEETS[0], Math.min(innerHeight * 0.92, pull.height - (event.clientY - pull.y)))
+  document.documentElement.style.setProperty('--sheet', `${height}px`)
+})
+handle.addEventListener('pointerup', () => {
+  if (!pull) return
+  const height = panel.getBoundingClientRect().height
+  setSheet(pull.moved < 6 ? (sheet + 1) % 3 : [0, 1, 2].reduce((best, state) => Math.abs(sheetPixels(state) - height) < Math.abs(sheetPixels(best) - height) ? state : best, 0))
+  pull = null
+})
+addEventListener('resize', () => setSheet(sheet))
+setSheet(1)
 navigator.permissions?.query({ name: 'geolocation' }).then(state => { if (state.state === 'granted') locate(false) }).catch(() => {})
 
 const tileX = (lon: number, z: number) => (lon + 180) / 360 * 2 ** z

@@ -39,8 +39,13 @@ b, .stat b, .badge, .clock { font-variant-numeric: tabular-nums; }
 .tag.airport { font-weight: 700; letter-spacing: 0.04em; border-color: rgba(255, 255, 255, 0.35); }
 .tag { position: fixed; left: 0; top: 0; padding: 3px 8px; border: 1px solid var(--edge); border-radius: 6px; background: rgba(4, 6, 13, 0.82); font-size: 12px; white-space: nowrap; pointer-events: none; }
 
-.top { position: fixed; top: max(20px, env(safe-area-inset-top)); left: max(20px, env(safe-area-inset-left)); display: grid; gap: 12px; max-width: min(460px, calc(100vw - 420px)); }
-.brand { pointer-events: none; text-shadow: 0 1px 12px var(--space), 0 0 4px var(--space); }
+.top { position: fixed; top: max(20px, env(safe-area-inset-top)); left: max(20px, env(safe-area-inset-left)); display: grid; gap: 12px; max-width: min(560px, calc(100vw - 420px)); }
+.brand { display: flex; gap: 10px; align-items: center; pointer-events: none; text-shadow: 0 1px 12px var(--space), 0 0 4px var(--space); }
+.logo { flex: none; width: 44px; height: 44px; filter: drop-shadow(0 0 10px rgba(91, 156, 245, 0.45)); }
+.ar-chip { pointer-events: auto; margin-left: auto; border-color: var(--accent); background: rgba(138, 180, 255, 0.22); font-weight: 600; }
+.controls { display: grid; gap: 12px; }
+.handle { display: none; }
+.card .actions { position: sticky; bottom: -16px; margin: 0 -16px -16px; padding: 12px 16px; border-top: 1px solid var(--edge); background: var(--glass); backdrop-filter: blur(14px); }
 .brand h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; }
 .brand p { margin: 2px 0 0; color: var(--muted); }
 
@@ -174,14 +179,19 @@ button.row:hover, .row[aria-current="true"] { background: rgba(138, 180, 255, 0.
 .ar-pick { position: absolute; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: calc(100% - 24px); text-align: center; }
 
 @media (max-width: 760px) {
-  #globe { bottom: auto; height: 56vh; }
-  .top { top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px; max-width: none; gap: 8px; }
-  .brand h1 { font-size: 22px; }
-  .brand p { font-size: 12px; }
-  .layers, .time, .speeds { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .layers > *, .time > *, .speeds > * { flex: none; }
-  .panel { top: 56vh; left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); width: auto; }
-  .tabs button { font-size: 12px; }
-  .card { top: 56vh; left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); width: auto; max-height: none; background: rgba(11, 16, 29, 0.97); }
+  #globe { bottom: auto; height: calc(100dvh - var(--sheet, 45dvh) + 20px); }
+  .top { top: max(10px, env(safe-area-inset-top)); left: 10px; right: 10px; max-width: none; gap: 8px; }
+  .logo { width: 34px; height: 34px; }
+  .brand h1 { font-size: 20px; }
+  .brand p { display: none; }
+  .controls { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -10px; padding: 0 10px; }
+  .controls .layers, .controls .time, .controls .speeds { display: contents; }
+  .controls button, .clock, .ar-chip { flex: none; min-height: 36px; font-size: 13px; }
+  .panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; height: var(--sheet, 45dvh); border-radius: 18px 18px 0 0; border-bottom: 0; }
+  .handle { display: block; flex: none; width: 100%; height: 26px; border: 0; background: transparent; touch-action: none; cursor: grab; }
+  .handle::before { content: ""; display: block; width: 44px; height: 5px; margin: 0 auto; border-radius: 3px; background: rgba(160, 185, 230, 0.45); }
+  .tabs button { min-height: 44px; font-size: 13px; }
+  .row { padding: 10px 6px; }
+  .card { top: auto; left: 0; right: 0; bottom: 0; width: auto; height: max(var(--sheet, 45dvh), 50dvh); max-height: none; border-radius: 18px 18px 0 0; border-bottom: 0; background: rgba(11, 16, 29, 0.97); }
   .legend { display: none; }
 }
