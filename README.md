@@ -14,7 +14,7 @@ A globe drawn from scratch with WebGL, fed by real data:
 | Launches | The next 20 rocket launches worldwide on their launch pads, with countdown, rocket, mission and orbit | The Space Devs' Launch Library |
 | Aurora | NOAA's 30-minute aurora forecast glowing on the night side, plus the Kp index and your own chance of seeing one | NOAA Space Weather Prediction Center |
 | Above you | A chart of your sky right now with every satellite and plane above you, bright satellites you can see tonight, space station passes, and the nearest planes | Worked out on your device; your location never leaves it |
-| Sky view (AR) | Hold your phone up: the live camera with every satellite, plane, the Sun, the Moon (and how full it is) and the brightest stars labelled where they really are. Aim the circle at a dot to see what it is. On a laptop, drag to look around | Your phone's compass and tilt sensors, nothing leaves the device |
+| Sky view (AR) | Hold your phone up: the live camera with every satellite, plane, the Sun, the Moon (and how full it is) and the brightest stars labelled where they really are. Aim the circle at a dot to see what it is; arrows at the edges point to the ISS, Moon and Sun. A compass strip shows your heading, the motion sensors are smoothed so labels sit still, and one tap on the Moon or Sun corrects the phone compass (which points to magnetic north). On a laptop, drag to look around | Your phone's compass and tilt sensors, nothing leaves the device |
 | Stats | Who owns the satellites, what they're for, how high they orbit, planes by height, the busiest skies right now, quakes by size | All of the above, live |
 | Time | Live, or fast-forward ×60 and ×600: satellites race round, the day/night line sweeps across | |
 

@@ -173,10 +173,12 @@ button.row:hover, .row[aria-current="true"] { background: rgba(138, 180, 255, 0.
 .ar-open { justify-content: center; padding: 9px 12px; border-color: var(--accent); background: rgba(138, 180, 255, 0.18); font-size: 13px; font-weight: 600; }
 .ar { position: fixed; inset: 0; z-index: 10; background: #000; }
 .ar video, .ar canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.ar canvas { touch-action: none; }
-.ar-top { position: absolute; top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
-.ar-top p, .ar-pick { margin: 0; padding: 6px 12px; border-radius: 999px; background: rgba(4, 6, 13, 0.7); font-size: 13px; }
-.ar-pick { position: absolute; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: calc(100% - 24px); text-align: center; }
+.ar canvas { top: env(safe-area-inset-top, 0px); height: calc(100% - env(safe-area-inset-top, 0px)); touch-action: none; }
+.ar-close { position: absolute; top: calc(64px + env(safe-area-inset-top, 0px)); right: 12px; }
+.ar-card { position: absolute; left: 12px; right: 12px; bottom: max(16px, env(safe-area-inset-bottom)); display: grid; gap: 4px; justify-items: center; padding: 12px 14px; border: 1px solid var(--edge); border-radius: 16px; background: rgba(4, 8, 18, 0.78); backdrop-filter: blur(10px); text-align: center; }
+.ar-title { margin: 0; font-size: 16px; font-weight: 700; }
+.ar-detail { margin: 0; color: var(--muted); font-size: 13px; }
+.ar-card .pill { margin-top: 6px; white-space: normal; }
 
 @media (max-width: 760px) {
   #globe { bottom: auto; height: calc(100dvh - var(--sheet, 45dvh) + 20px); }

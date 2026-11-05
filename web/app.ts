@@ -4,7 +4,7 @@ import { countryFinder, mapTexture } from './land.ts'
 import { altitudeColor, altitudeRgb, ago, button, clockTime, dayName, el, fillCard, fillRows, latLon, link, number } from './views.ts'
 import type { Row } from './views.ts'
 import { bars, drawSky, lineChart } from './charts.ts'
-import { openAr } from './ar.ts'
+import { arOpen, openAr } from './ar.ts'
 import type { SkyObject } from './ar.ts'
 import type { SkyDot } from './charts.ts'
 import { OWNERS, SITES } from './names.ts'
@@ -18,7 +18,7 @@ import { MAX_ESTIMATE_MS, estimate, fromRows } from '../src/planes.ts'
 import type { Plane } from '../src/planes.ts'
 import { compass, lookAngles, sunDirection, surface } from '../src/passes.ts'
 import type { Pass } from '../src/passes.ts'
-import { GROUPS, STATIONS } from '../src/satellites.ts'
+import { GROUPS, STATIONS, fromGlobe } from '../src/satellites.ts'
 import { STARS, horizontal, moon } from '../src/sky.ts'
 import type { Aircraft, Launch, Route, TrackPoint, Volcano } from '../src/sources.ts'
 
@@ -1191,25 +1191,39 @@ const locate = (fly: boolean) => {
 $('#locate').addEventListener('click', () => locate(true))
 
 const skyObjects = (): SkyObject[] => {
-  const items: SkyObject[] = STARS.map(([name, ra, dec]) => ({ ...horizontal(ra * 15, dec, observer, simTime), color: '#fff8e8', size: 2.5, label: name, detail: `${name}, a star` }))
+  const items: SkyObject[] = STARS.map(([name, ra, dec]) => ({
+    ...horizontal(ra * 15, dec, observer, simTime), color: '#fff8e8', size: 2.2, name, detail: 'A bright star', label: true, anchor: true
+  }))
   const lunar = moon(simTime)
-  items.push({ ...horizontal(lunar.ra, lunar.dec, observer, simTime), color: '#e8e4d8', size: 14, label: 'Moon', detail: `The Moon, ${Math.round(lunar.lit * 100)}% lit` })
-  items.push({ ...lookAngles(observer, sunDirection(simTime).map(v => v * 1.5e8) as Vec3), color: '#ffd166', size: 16, label: 'Sun', detail: 'The Sun. Don’t look straight at it' })
+  items.push({ ...horizontal(lunar.ra, lunar.dec, observer, simTime), color: '#efe9d8', size: 13, name: 'Moon', detail: `${Math.round(lunar.lit * 100)}% lit`, important: true, anchor: true })
+  items.push({ ...lookAngles(observer, sunDirection(simTime).map(v => v * 1.5e8) as Vec3), color: '#ffd166', size: 15, name: 'Sun', detail: 'Don’t look straight at it', important: true, anchor: true })
+  const seconds = prev && next && next.time > prev.time ? (next.time - prev.time) / 1000 : 0
   for (let i = 0; i < above.all.length; i += 3) {
-    const sat = catalog[above.all[i]]
-    const position = satPosition(above.all[i])
-    if (!sat) continue
+    const index = above.all[i]
+    const sat = catalog[index]
+    const position = satPosition(index)
+    if (!sat || !position) continue
+    const look = lookAngles(observer, fromGlobe(position))
+    const station = sat.group === 0
+    const step = seconds ? [0, 1, 2].map(k => (next!.positions[index * 3 + k] - prev!.positions[index * 3 + k]) / seconds * 12) : null
     items.push({
-      azimuth: above.all[i + 1], elevation: above.all[i + 2], color: SAT_COLORS[sat.group], size: sat.group === 0 ? 6 : 2.5,
-      label: sat.group === 0 ? sat.name.replace(/ \(.*\)/, '') : undefined,
-      detail: `${sat.name}${position ? `, ${number(heightKm(position))} km up` : ''}, ${(purposes[records.get(sat.id)?.purpose ?? -1] ?? GROUPS[sat.group]).toLowerCase()}`
+      ...look, color: SAT_COLORS[sat.group], size: station ? 6 : 2.2, name: station ? sat.name.replace(/ \(.*\)/, '') : sat.name,
+      detail: `${purposes[records.get(sat.id)?.purpose ?? -1] ?? GROUPS[sat.group]}, ${number(heightKm(position))} km up, ${number(look.rangeKm)} km away`,
+      important: station, ahead: step && station ? lookAngles(observer, fromGlobe(position.map((v, k) => v + step[k]))) : undefined
     })
   }
   for (const { plane, distance } of nearestPlanes(80)) {
     if (distance > SKY_PLANES_KM) break
-    const { lat, lon } = planeGround(plane)
-    const look = lookAngles(observer, surface(lat, lon, 6371 + plane.altitudeM / 1000))
-    if (look.elevation > 0) items.push({ ...look, color: altitudeColor(plane.altitudeM / 1000), size: 4, label: plane.callsign || undefined, detail: `${plane.callsign || 'A plane'}, ${number(plane.altitudeM)} m up, ${number(distance)} km away` })
+    const at = (time: number) => {
+      const { lat, lon } = estimate(plane, time)
+      return lookAngles(observer, surface(lat, lon, 6371 + plane.altitudeM / 1000))
+    }
+    const look = at(simTime)
+    if (look.elevation <= 0) continue
+    items.push({
+      ...look, color: altitudeColor(plane.altitudeM / 1000), size: 4, name: plane.callsign || 'Plane', label: true, ahead: at(simTime + 20_000),
+      detail: `${number(plane.altitudeM)} m up, ${number(distance)} km away, flying ${compass(plane.track)}`
+    })
   }
   return items.filter(item => item.elevation > -1)
 }
@@ -1391,6 +1405,10 @@ const frame = (now: number) => {
   if (catalog.length && !asking) {
     if (!next) askFrame(simTime)
     else if (simTime >= next.time - speed * 400) askFrame(Math.max(simTime, next.time) + speed * 1000)
+  }
+  if (arOpen()) {
+    requestAnimationFrame(frame)
+    return
   }
   const ground = following ? groundOf(selection) : null
   if (flight) {

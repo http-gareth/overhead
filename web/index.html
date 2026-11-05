@@ -129,11 +129,12 @@
   <section id="ar" class="ar" hidden aria-label="Sky view">
     <video id="ar-video" autoplay playsinline muted></video>
     <canvas id="ar-canvas"></canvas>
-    <div class="ar-top">
-      <p id="ar-status">Point your phone at the sky</p>
-      <button type="button" id="ar-close" class="pill">Close</button>
+    <button type="button" id="ar-close" class="pill ar-close">Close</button>
+    <div class="ar-card">
+      <p id="ar-title" class="ar-title"></p>
+      <p id="ar-detail" class="ar-detail"></p>
+      <button type="button" id="ar-align" class="pill" hidden></button>
     </div>
-    <p id="ar-pick" class="ar-pick"></p>
   </section>
 
   <footer class="legend">
