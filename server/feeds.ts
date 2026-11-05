@@ -6,7 +6,7 @@ import { gzipSync } from 'node:zlib'
 import { isHttps, securityHeaders } from './files.ts'
 import { parseTleText } from '../src/sgp4.ts'
 import { fromOpenSky, toRows } from '../src/planes.ts'
-import { parseAurora, parseLaunches, parseSatcat, parseVolcanoes } from '../src/sources.ts'
+import { parseAurora, parseLaunches, parseVolcanoes } from '../src/sources.ts'
 
 type Feed = {
   name: string
@@ -35,14 +35,7 @@ const JPEG_TYPE = 'image/jpeg'
 const CACHE = process.env.CACHE_DIR ?? fileURLToPath(new URL('../.cache/', import.meta.url))
 export const USER_AGENT = { 'user-agent': 'Overhead (github.com/http-gareth)' }
 
-const PURPOSES: [string, string][] = [
-  ['stations', 'Space station'], ['gnss', 'Navigation'], ['weather', 'Weather'], ['resource', 'Earth imaging'],
-  ['sarsat', 'Search and rescue'], ['science', 'Science'], ['geodetic', 'Measuring the Earth'], ['military', 'Military'],
-  ['amateur', 'Amateur radio'], ['engineering', 'Technology testing'], ['education', 'Education'],
-  ['x-comm', 'Communications'], ['other-comm', 'Communications'], ['geo', 'Communications']
-]
-
-const celestrak = (group: string, format: string) => `https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=${format}`
+const ORBITS = 'https://raw.githubusercontent.com/http-gareth/overhead/data'
 export const GIBS = process.env.GIBS_URL ?? 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi'
 export const EOX = process.env.EOX_URL ?? 'https://tiles.maps.eox.at/wms'
 export const gibsUrl = (layer: string, box: number[], width: number, height: number, date?: string, base = GIBS) =>
@@ -51,7 +44,6 @@ export const gibsUrl = (layer: string, box: number[], width: number, height: num
 const gibs = (layer: string, width: number, day?: number) =>
   gibsUrl(layer, [-180, -90, 180, 90], width, width / 2, day === undefined ? undefined : new Date(Date.now() - day * 86_400_000).toISOString().slice(0, 10))
 
-const utf8 = (bodies: Buffer[]) => bodies.map(body => body.toString('utf8'))
 const json = ([body]: Buffer[]) => (JSON.parse(body.toString('utf8')), body)
 export const jpeg = (minBytes: number) => ([body]: Buffer[]) => {
   if (body[0] !== 0xff || body[1] !== 0xd8 || body.length < minBytes) throw new Error('not a usable photo')
@@ -70,14 +62,11 @@ const feed = (name: string, freshMs: number, sources: () => string[], prepare: F
 export const FEEDS = new Map<string, Feed>([
   feed('quakes', MINUTE, () => ['https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson'], json),
   feed('map', Infinity, () => ['https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json'], json),
-  feed('satellites', 2 * HOUR, () => [celestrak('active', 'tle')], ([body]) => {
+  feed('satellites', 2 * HOUR, () => [`${ORBITS}/satellites.tle`, 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle'], ([body]) => {
     if (!parseTleText(body.toString('utf8')).length) throw new Error('no satellites in the feed')
     return body
-  }, TEXT_TYPE),
-  feed('satinfo', 24 * HOUR, () => ['https://celestrak.org/pub/satcat.csv', ...PURPOSES.map(([group]) => celestrak(group, 'csv'))], bodies => {
-    const [satcat, ...groups] = utf8(bodies)
-    return JSON.stringify(parseSatcat(satcat, groups.map((csv, i) => [PURPOSES[i][1], csv])))
-  }),
+  }, TEXT_TYPE, true),
+  feed('satinfo', 6 * HOUR, () => [`${ORBITS}/satinfo.json`], json),
   feed('planes', 20 * MINUTE, () => ['https://opensky-network.org/api/states/all'], ([body]) => {
     const rows = toRows(fromOpenSky(JSON.parse(body.toString('utf8'))))
     if (!rows.length) throw new Error('no planes in the feed')
@@ -90,7 +79,7 @@ export const FEEDS = new Map<string, Feed>([
   feed('launches', HOUR, () => ['https://ll.thespacedevs.com/2.3.0/launches/upcoming/?limit=20'], ([body]) =>
     JSON.stringify(parseLaunches(JSON.parse(body.toString('utf8'))))),
   feed('aurora', 10 * MINUTE, () => ['https://services.swpc.noaa.gov/json/ovation_aurora_latest.json', 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'], bodies => {
-    const [ovation, kp] = utf8(bodies).map(body => JSON.parse(body))
+    const [ovation, kp] = bodies.map(body => JSON.parse(body.toString('utf8')))
     return JSON.stringify(parseAurora(ovation, kp))
   }),
   feed('volcanoes', 6 * HOUR, () => ['https://volcano.si.edu/news/WeeklyVolcanoRSS.xml'], ([body]) => {

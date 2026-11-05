@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { FEEDS } from '../server/feeds.ts'
 import { csvRows, parseAircraft, parseAurora, parseLaunches, parseRoute, parseSatcat, parseTrack, parseVolcanoes } from '../src/sources.ts'
 
 test('aircraft and routes keep only clean fields, and photos only from the known host', () => {
@@ -85,4 +86,10 @@ test('launches, aurora and volcano reports are read safely', () => {
   assert.equal(volcanoes[0].summary.includes('<'), false, 'no markup survives')
   assert.match(volcanoes[0].summary, /Ash plumes rose 1 km & drifted N/)
   assert.throws(() => parseVolcanoes('not xml'))
+})
+
+test('the aurora feed combines the two NOAA files into one answer', () => {
+  const ovation = { coordinates: Array.from({ length: 1200 }, (_, i) => [i % 360, -90 + Math.floor(i / 360), 1]) }
+  const prepared = FEEDS.get('/api/aurora')!.prepare([Buffer.from(JSON.stringify(ovation)), Buffer.from(JSON.stringify([{ time_tag: 't', Kp: 2 }]))])
+  assert.equal(JSON.parse(String(prepared)).kp, 2)
 })
