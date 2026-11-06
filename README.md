@@ -8,7 +8,7 @@ A globe drawn from scratch with WebGL, fed by real data:
 |---|---|---|
 | The Earth | Yesterday's real satellite photo of the whole planet, clouds included, with city lights glowing on the night side. Or a clean map with country borders | NASA GIBS: NOAA-20 VIIRS, Blue Marble, Black Marble |
 | Satellites | All ~16,000 active satellites moving in real time. Click one for height, speed, the country below it, who owns it, when and where it was launched, what it's for, its size, whether it's in sunlight, its orbit and ground track, and when it next passes over you | CelesTrak orbits and catalogue, positions computed in your browser with SGP4 written from scratch |
-| Planes | ~5,000 to 11,000 aircraft in the air (it depends on the time of day), pointing the way they fly and coloured by height. Click one for the aircraft type, registration, airline, route with progress, a photo, the path it has flown drawn on the globe, and height and speed charts | The OpenSky Network, adsbdb, airport-data.com photos |
+| Planes | Thousands of airliners in the air across 32 common aircraft types, pointing the way they fly and coloured by height. Click one for the aircraft type, registration, airline, route with progress, a photo, the path it has flown drawn on the globe, and height and speed charts | adsb.lol, The OpenSky Network (flight paths), adsbdb, airport-data.com photos |
 | Earthquakes | Everything from the last 24 hours, sized by magnitude, coloured by depth; the last hour pulses | USGS real-time feed |
 | Volcanoes | Volcanoes in this week's eruption report, with the report text | Smithsonian Global Volcanism Program and USGS |
 | Launches | The next 20 rocket launches worldwide on their launch pads, with countdown, rocket, mission and orbit | The Space Devs' Launch Library |
@@ -25,7 +25,7 @@ A globe drawn from scratch with WebGL, fed by real data:
 - **The globe** isn't a mesh. For every pixel, the graphics card works out where a ray from your eye hits a sphere, then shades it: land and country borders from Natural Earth, glowing coastlines, a lat/long grid, sun glint on the oceans, the real day/night line from the sun's position, an atmosphere and a star field.
 - **Satellites** run in a background worker. Orbit maths (SGP4) is written from scratch and checked against the official published test results to within a metre. The worker computes all ~16,000 positions once a second (about 10 ms), and the graphics card glides each satellite smoothly between those snapshots. A satellite is hidden only when the Earth is actually in the way.
 - **Pass predictions** use the satellite's position from where you stand, plus the sun: a pass is "visible" when your sky is dark but the station is still in sunlight.
-- **Planes** come as one radar snapshot every 20 minutes (the free OpenSky limit). Between snapshots the graphics card moves each plane along its heading at its speed, and the app says so ("radar fix 6 min ago, estimated since"). Plane icons are drawn by the shader, not images.
+- **Planes** come from adsb.lol's open data, one aircraft type per request, one request every 4 seconds, refreshed every 20 minutes. OpenSky blocks cloud hosts, so it is only used for the path a plane has flown. The registration country comes from the plane's transponder code. Between snapshots the graphics card moves each plane along its heading at its speed, and the app says so ("radar fix 6 min ago, estimated since"). Plane icons are drawn by the shader, not images.
 - **The server** (`server/`) is Node's standard library. It serves the app, strips TypeScript on the fly, and proxies the data feeds: it caches each one (in memory and on disk, so a restart doesn't re-download), respects each source's limits, gzips them, trims the plane feed to just what's needed, refuses anything that isn't valid data, and keeps serving the last good copy if a source goes down.
 - **Security**: a strict Content Security Policy, no `innerHTML`, every name from the feeds is inserted as plain text, links only to the sources' own pages, and path-traversal and prototype-pollution checks, all under test.
 - **Zero dependencies.**
@@ -42,7 +42,7 @@ Node 22.13 or newer.
 ## Data
 
 - Satellite orbits and catalogue: [CelesTrak](https://celestrak.org). They publish new orbits every 2 hours and ask that each copy is downloaded only once, so the server caches orbits for 2 hours and the catalogue for a day.
-- Planes and flight paths: [The OpenSky Network](https://opensky-network.org), free for non-commercial use. Aircraft and routes: [adsbdb](https://www.adsbdb.com). Photos: airport-data.com.
+- Planes: [adsb.lol](https://adsb.lol), open data under the ODbL. Flight paths: [The OpenSky Network](https://opensky-network.org), free for non-commercial use. Aircraft and routes: [adsbdb](https://www.adsbdb.com). Photos: airport-data.com.
 - Earth photos: NASA's Global Imagery Browse Services (GIBS). Close-up ground: Sentinel-2 cloudless by EOX IT Services GmbH (contains modified Copernicus Sentinel data), free for non-commercial use with attribution.
 - Earthquakes: USGS Earthquake Hazards Program (public domain).
 - Volcanoes: Smithsonian Institution Global Volcanism Program and USGS weekly report.

@@ -53,6 +53,18 @@ const getJson = async (url: string, headers: Record<string, string> = USER_AGENT
   return JSON.parse(body)
 }
 
+let openskyDownUntil = 0
+
+const pathFlown = async (hex: string) => {
+  if (Date.now() < openskyDownUntil) return null
+  try {
+    return parseTrack(await getJson(`${OPENSKY}/tracks/all?icao24=${hex}&time=0`, await openskyHeaders()))
+  } catch (error) {
+    if (String(error).includes('could not be reached')) openskyDownUntil = Date.now() + 10 * 60_000
+    throw error
+  }
+}
+
 export const servePlane = async (req: IncomingMessage, res: ServerResponse) => {
   const headers = { ...securityHeaders(isHttps(req)), 'cache-control': 'no-cache' }
   const query = new URL(req.url ?? '/', 'http://localhost').searchParams
@@ -62,7 +74,7 @@ export const servePlane = async (req: IncomingMessage, res: ServerResponse) => {
   const [aircraft, route, track] = await Promise.all([
     remember(`aircraft:${hex}`, DAY, () => getJson(`${ADSBDB}/aircraft/${hex}`).then(parseAircraft)),
     callsign ? remember(`route:${callsign}`, DAY, () => getJson(`${ADSBDB}/callsign/${callsign}`).then(parseRoute)) : null,
-    remember(`track:${hex}`, TRACK_MS, () => openskyHeaders().then(auth => getJson(`${OPENSKY}/tracks/all?icao24=${hex}&time=0`, auth)).then(parseTrack))
+    remember(`track:${hex}`, TRACK_MS, () => pathFlown(hex))
   ])
   res.writeHead(200, { ...headers, 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify({ aircraft, route, track }))
 }

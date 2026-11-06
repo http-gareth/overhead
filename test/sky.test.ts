@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { EARTH_RADIUS_KM, parseTle } from '../src/sgp4.ts'
 import { compass, lookAngles, passes, sunElevation, sunlit, surface } from '../src/passes.ts'
-import { MAX_ESTIMATE_MS, estimate, fromOpenSky, fromRows, toRows } from '../src/planes.ts'
+import { MAX_ESTIMATE_MS, countryOf, estimate, fromAdsbLol, fromOpenSky, fromRows, toRows } from '../src/planes.ts'
 import { greatCircleKm, toLatLon, toVector } from '../src/geo.ts'
 import { GROUPS, groupOf, orbit, overhead, positions } from '../src/satellites.ts'
 import { earthFixed } from '../src/sgp4.ts'
@@ -58,6 +58,28 @@ test('OpenSky data is filtered to clean airborne planes and survives the round t
   assert.equal(planes[1].callsign, '', 'anything but letters and digits is stripped')
   assert.deepEqual(fromRows(JSON.parse(JSON.stringify(toRows(planes)))), planes)
   assert.deepEqual(fromRows('nonsense'), [])
+})
+
+test('adsb.lol data is converted to metres and seconds, and the registration country comes from the transponder code', () => {
+  const planes = fromAdsbLol({
+    now: 1_793_800_000_000,
+    ac: [
+      { hex: 'ac0f93', flight: 'SWA3261 ', lat: 33.7, lon: -125.8, alt_baro: 36000, gs: 432, track: 77, baro_rate: -1000, seen_pos: 2.5 },
+      { hex: '00ae17', flight: 'SFR161', lat: -29.8, lon: 31, alt_baro: 'ground', gs: 0, track: 0 },
+      { hex: '~2a01b3', lat: 1, lon: 1, alt_baro: 1000, gs: 100, track: 10 },
+      { hex: '4ca87c', lat: 999, lon: 1, alt_baro: 1000, gs: 100, track: 10 },
+      'not a plane'
+    ]
+  })
+  assert.deepEqual(planes.map(p => p.id), ['ac0f93'], 'ground, non-ICAO and impossible positions are dropped')
+  const [plane] = planes
+  assert.equal(plane.callsign, 'SWA3261')
+  assert.equal(plane.country, 'United States')
+  assert.ok(Math.abs(plane.altitudeM - 10972.8) < 0.01)
+  assert.ok(Math.abs(plane.speedMs - 222.24) < 0.01)
+  assert.ok(Math.abs(plane.climbMs + 5.08) < 0.001)
+  assert.equal(plane.time, 1_793_800_000_000 - 2500)
+  assert.deepEqual(['00ae17', '4ca87c', '400a1b', '896123', '76cd03', '000001'].map(countryOf), ['South Africa', 'Ireland', 'United Kingdom', 'United Arab Emirates', 'Singapore', ''])
 })
 
 test('planes glide along their heading between radar fixes, but not forever', () => {

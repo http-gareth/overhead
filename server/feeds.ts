@@ -2,10 +2,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { gzipSync } from 'node:zlib'
 import { isHttps, securityHeaders } from './files.ts'
 import { parseTleText } from '../src/sgp4.ts'
-import { fromOpenSky, toRows } from '../src/planes.ts'
+import { fromAdsbLol, toRows } from '../src/planes.ts'
 import { parseAurora, parseLaunches, parseVolcanoes } from '../src/sources.ts'
 
 type Feed = {
@@ -15,7 +16,7 @@ type Feed = {
   freshMs: number
   type: string
   prepare: (bodies: Buffer[]) => Buffer | string
-  headers: () => Promise<Record<string, string>>
+  gapMs: number
   body?: Buffer
   gzip?: Buffer
   fetchedAt?: number
@@ -51,7 +52,7 @@ let openskyLogin: Promise<void> | undefined
 
 const logIn = async (id: string, secret: string) => {
   const response = await reach(OPENSKY_TOKEN_URL, {
-    method: 'POST', headers: USER_AGENT, signal: AbortSignal.timeout(TIMEOUT_MS),
+    method: 'POST', headers: USER_AGENT, signal: AbortSignal.timeout(10_000),
     body: new URLSearchParams({ grant_type: 'client_credentials', client_id: id, client_secret: secret })
   })
   if (!response.ok) throw new Error(`OpenSky login answered ${response.status}`)
@@ -71,6 +72,11 @@ export const noteRejected = (status: number, headers: Record<string, string>) =>
 }
 
 const ORBITS = 'https://raw.githubusercontent.com/http-gareth/overhead/data'
+const ADSBLOL = process.env.ADSBLOL_URL ?? 'https://api.adsb.lol'
+const PLANE_TYPES = [
+  'B738', 'A320', 'A20N', 'B38M', 'A321', 'A21N', 'B737', 'A319', 'B77W', 'B789', 'E75L', 'E190', 'A359', 'A333', 'B788', 'CRJ9',
+  'AT76', 'DH8D', 'B763', 'B772', 'A332', 'E195', 'BCS3', 'B739', 'A388', 'B744', 'B748', 'CRJ7', 'B752', 'B78X', 'A339', 'A35K'
+]
 export const GIBS = process.env.GIBS_URL ?? 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi'
 export const EOX = process.env.EOX_URL ?? 'https://tiles.maps.eox.at/wms'
 export const gibsUrl = (layer: string, box: number[], width: number, height: number, date?: string, base = GIBS) =>
@@ -85,13 +91,11 @@ export const jpeg = (minBytes: number) => ([body]: Buffer[]) => {
   return body
 }
 
-const plain = async () => USER_AGENT
-
-const feed = (name: string, freshMs: number, sources: () => string[], prepare: Feed['prepare'], type = JSON_TYPE, firstOnly = false, headers = plain): [string, Feed] => {
+const feed = (name: string, freshMs: number, sources: () => string[], prepare: Feed['prepare'], type = JSON_TYPE, firstOnly = false, gapMs = 0): [string, Feed] => {
   const env = name.toUpperCase().replaceAll('-', '_')
   const override = process.env[`${env}_URL`]
   return [`/api/${name}`, {
-    name, freshMs: Number(process.env[`${env}_FRESH_MS`] ?? freshMs), type, prepare, firstOnly, headers,
+    name, freshMs: Number(process.env[`${env}_FRESH_MS`] ?? freshMs), type, prepare, firstOnly, gapMs,
     sources: override ? () => override.split(' ') : sources
   }]
 }
@@ -104,11 +108,18 @@ export const FEEDS = new Map<string, Feed>([
     return body
   }, TEXT_TYPE, true),
   feed('satinfo', 6 * HOUR, () => [`${ORBITS}/satinfo.json`], json),
-  feed('planes', 20 * MINUTE, () => ['https://opensky-network.org/api/states/all'], ([body]) => {
-    const rows = toRows(fromOpenSky(JSON.parse(body.toString('utf8'))))
-    if (!rows.length) throw new Error('no planes in the feed')
-    return JSON.stringify(rows)
-  }, JSON_TYPE, false, openskyHeaders),
+  feed('planes', 20 * MINUTE, () => PLANE_TYPES.map(type => `${ADSBLOL}/v2/type/${type}`), bodies => {
+    const read = (body: Buffer) => {
+      try {
+        return fromAdsbLol(JSON.parse(body.toString('utf8')))
+      } catch {
+        return []
+      }
+    }
+    const planes = new Map(bodies.flatMap(read).map(plane => [plane.id, plane]))
+    if (!planes.size) throw new Error('no planes in the feed')
+    return JSON.stringify(toRows([...planes.values()]))
+  }, JSON_TYPE, false, 4_000),
   feed('earth', 6 * HOUR, () => [1, 2].map(day => gibs('VIIRS_NOAA20_CorrectedReflectance_TrueColor', 4096, day)), jpeg(600_000), JPEG_TYPE, true),
   feed('earth-small', 6 * HOUR, () => [1, 2].map(day => gibs('VIIRS_NOAA20_CorrectedReflectance_TrueColor', 2048, day)), jpeg(200_000), JPEG_TYPE, true),
   feed('bluemarble', Infinity, () => [gibs('BlueMarble_NextGeneration', 2048)], jpeg(100_000), JPEG_TYPE),
@@ -126,9 +137,8 @@ export const FEEDS = new Map<string, Feed>([
   })
 ])
 
-const fetchBody = async (url: string, headers: Record<string, string>) => {
-  const response = await reach(url, { signal: AbortSignal.timeout(TIMEOUT_MS), headers })
-  noteRejected(response.status, headers)
+const fetchBody = async (url: string) => {
+  const response = await reach(url, { signal: AbortSignal.timeout(TIMEOUT_MS), headers: USER_AGENT })
   if (!response.ok) throw new Error(`${url} answered ${response.status}`)
   if (Number(response.headers.get('content-length')) > MAX_BYTES) throw new Error(`${url} is too big`)
   const body = Buffer.from(await response.arrayBuffer())
@@ -148,7 +158,7 @@ const download = async (feed: Feed) => {
     let failure: unknown
     for (const url of feed.sources()) {
       try {
-        prepared = feed.prepare([await fetchBody(url, await feed.headers())])
+        prepared = feed.prepare([await fetchBody(url)])
         feed.note = new URL(url).searchParams.get('TIME') ?? ''
         break
       } catch (error) {
@@ -158,7 +168,16 @@ const download = async (feed: Feed) => {
     if (prepared === undefined) throw failure ?? new Error(`${feed.name} has no sources`)
   } else {
     const bodies: Buffer[] = []
-    for (const url of feed.sources()) bodies.push(await fetchBody(url, await feed.headers()))
+    let failure: unknown
+    for (const [index, url] of feed.sources().entries()) {
+      if (index) await sleep(feed.gapMs)
+      try {
+        bodies.push(await fetchBody(url))
+      } catch (error) {
+        failure = error
+      }
+    }
+    if (!bodies.length) throw failure ?? new Error(`${feed.name} has no sources`)
     prepared = feed.prepare(bodies)
   }
   const body = store(feed, prepared, Date.now())

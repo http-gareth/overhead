@@ -105,10 +105,10 @@ const ISS = [
 ].join('\r\n')
 
 const SKY = JSON.stringify({
-  time: 1_793_800_000,
-  states: [
-    ['abc123', 'SAA188  ', 'South Africa', 1_793_800_000, 1_793_800_000, 28.2, -26.1, 10000, false, 230, 90, 0, null, 10200, null],
-    ['def456', 'PARKED', 'South Africa', 1_793_800_000, 1_793_800_000, 28.2, -26.1, 0, true, 0, 0, 0, null, 0, null]
+  now: 1_793_800_000_000,
+  ac: [
+    { hex: '00ae17', flight: 'SAA188  ', lat: -26.1, lon: 28.2, alt_baro: 32000, alt_geom: 33465, gs: 447.1, track: 90, baro_rate: 0, seen_pos: 0 },
+    { hex: 'def456', flight: 'PARKED', lat: -26.1, lon: 28.2, alt_baro: 'ground', gs: 0, track: 0 }
   ]
 })
 
@@ -126,7 +126,11 @@ test('satellites and planes are checked and trimmed before anyone sees them, and
     assert.equal(gunzipSync(zipped.raw).toString('utf8'), satellites.body)
     const planes = await get(server.port, '/api/planes')
     assert.equal(planes.status, 200)
-    assert.deepEqual(JSON.parse(planes.body), [['abc123', 'SAA188', 'South Africa', -26.1, 28.2, 10200, 230, 90, 0, 1_793_800_000_000]], 'only the plane in the air, in our compact shape')
+    const rows = JSON.parse(planes.body)
+    assert.equal(rows.length, 1, 'only the plane in the air')
+    const [id, callsign, country, lat, lon, altitude, speed, heading, climb, time] = rows[0]
+    assert.deepEqual([id, callsign, country, lat, lon, altitude, heading, climb, time], ['00ae17', 'SAA188', 'South Africa', -26.1, 28.2, 10200, 90, 0, 1_793_800_000_000])
+    assert.ok(Math.abs(speed - 230) < 0.1, 'knots become metres a second')
     assert.equal(celestrak.hits() + opensky.hits(), 2, 'each source was asked once')
   } finally {
     server.stop()
@@ -135,7 +139,16 @@ test('satellites and planes are checked and trimmed before anyone sees them, and
   }
 
   const junk = await fakeUpstream([() => [200, '<html>maintenance</html>']])
-  const empty = await fakeUpstream([() => [200, JSON.stringify({ time: 1, states: null })]])
+  const mixed = await fakeUpstream([() => [200, 'rate limit exceeded'], () => [200, SKY]])
+  const partial = await startServer({ PLANES_URL: `${mixed.url} ${mixed.url}` })
+  try {
+    assert.equal(JSON.parse((await get(partial.port, '/api/planes')).body).length, 1, 'one bad answer does not throw away the good ones')
+  } finally {
+    partial.stop()
+    mixed.close()
+  }
+
+  const empty = await fakeUpstream([() => [200, JSON.stringify({ now: 1, ac: [] })]])
   const strict = await startServer({ SATELLITES_URL: junk.url, PLANES_URL: empty.url })
   try {
     assert.equal((await get(strict.port, '/api/satellites')).status, 502, 'a page with no orbits in it is refused')
@@ -147,10 +160,10 @@ test('satellites and planes are checked and trimmed before anyone sees them, and
   }
 })
 
-test('with OpenSky keys set, planes are fetched with a login token that is reused until it expires', async () => {
+test('with OpenSky keys set, plane paths are fetched with a login token that is reused until it is rejected', async () => {
   const seen: { path: string, auth?: string, body: string }[] = []
   let revoked = false
-  const opensky = createServer((req, res) => {
+  const upstream = createServer((req, res) => {
     let body = ''
     req.on('data', chunk => { body += chunk })
     req.on('end', () => {
@@ -159,37 +172,37 @@ test('with OpenSky keys set, planes are fetched with a login token that is reuse
         const ok = new URLSearchParams(body).get('client_secret') === 'right'
         return res.writeHead(ok ? 200 : 401, { 'content-type': 'application/json' }).end(JSON.stringify({ access_token: 'abc', expires_in: 1800 }))
       }
+      if (!req.url?.startsWith('/tracks/')) return res.writeHead(404).end()
       if (revoked || req.headers.authorization !== 'Bearer abc') return res.writeHead(401).end()
-      res.writeHead(200, { 'content-type': 'application/json' }).end(SKY)
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ path: [[1, -26.1, 28.2, 1500, 0, false], [2, -26.0, 28.2, 1800, 0, false]] }))
     })
   })
-  await new Promise<void>(resolve => opensky.listen(0, resolve))
-  const base = `http://127.0.0.1:${(opensky.address() as AddressInfo).port}`
-  const keys = { PLANES_URL: `${base}/states`, OPENSKY_TOKEN_URL: `${base}/token`, OPENSKY_CLIENT_ID: 'overhead', PLANES_FRESH_MS: '0' }
-  const server = await startServer({ ...keys, OPENSKY_CLIENT_SECRET: 'right' })
+  await new Promise<void>(resolve => upstream.listen(0, resolve))
+  const base = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`
+  const env = { ADSBDB_URL: base, OPENSKY_API_URL: base, OPENSKY_TOKEN_URL: `${base}/token`, OPENSKY_CLIENT_ID: 'overhead' }
+  const logins = () => seen.filter(hit => hit.path === '/token').length
+  const server = await startServer({ ...env, OPENSKY_CLIENT_SECRET: 'right' })
+  const track = async (port: number, hex: string) => JSON.parse((await get(port, `/api/plane?hex=${hex}`)).body).track
   try {
-    assert.equal((await get(server.port, '/api/planes')).status, 200)
-    await get(server.port, '/api/planes')
-    assert.equal(seen.filter(hit => hit.path === '/token').length, 1, 'one login serves many downloads')
-    assert.match(seen[0].body, /grant_type=client_credentials/)
-    assert.ok(seen.filter(hit => hit.path === '/states').every(hit => hit.auth === 'Bearer abc'))
+    assert.equal((await track(server.port, '00ae17')).length, 2)
+    assert.equal((await track(server.port, '00ae18')).length, 2)
+    assert.equal(logins(), 1, 'one login serves many lookups')
+    assert.match(seen.find(hit => hit.path === '/token')!.body, /grant_type=client_credentials/)
+    assert.ok(seen.filter(hit => hit.path.startsWith('/tracks/')).every(hit => hit.auth === 'Bearer abc'))
     revoked = true
-    await get(server.port, '/api/planes')
+    assert.equal(await track(server.port, '00ae19'), null)
     revoked = false
-    assert.equal((await get(server.port, '/api/planes')).status, 200)
-    assert.equal(seen.filter(hit => hit.path === '/token').length, 2, 'a rejected token makes the next download log in again')
+    assert.equal((await track(server.port, '00ae1a')).length, 2)
+    assert.equal(logins(), 2, 'a rejected token makes the next lookup log in again')
   } finally {
     server.stop()
   }
-  const refused = await startServer({ ...keys, OPENSKY_CLIENT_SECRET: 'wrong' })
+  const refused = await startServer({ ...env, OPENSKY_CLIENT_SECRET: 'wrong' })
   try {
-    const answer = await get(refused.port, '/api/planes')
-    assert.equal(answer.status, 502)
-    assert.match(answer.body, /OpenSky login answered 401/, 'the reason is reported, never the secret')
-    assert.doesNotMatch(answer.body, /wrong/)
+    assert.equal(await track(refused.port, '00ae1b'), null, 'a refused login just means no path')
   } finally {
     refused.stop()
-    opensky.close()
+    upstream.close()
   }
 })
 
