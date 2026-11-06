@@ -37,11 +37,20 @@ const CACHE = process.env.CACHE_DIR ?? fileURLToPath(new URL('../.cache/', impor
 export const USER_AGENT = { 'user-agent': 'Overhead (github.com/http-gareth)' }
 
 const OPENSKY_TOKEN_URL = process.env.OPENSKY_TOKEN_URL ?? 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token'
+export const reach = async (url: string, init: RequestInit) => {
+  try {
+    return await fetch(url, init)
+  } catch (error) {
+    const cause = (error as { cause?: { code?: string, message?: string } }).cause
+    throw new Error(`${new URL(url).host} could not be reached (${cause?.code ?? cause?.message ?? (error as Error).message})`)
+  }
+}
+
 let openskyToken = { value: '', expiresAt: 0 }
 let openskyLogin: Promise<void> | undefined
 
 const logIn = async (id: string, secret: string) => {
-  const response = await fetch(OPENSKY_TOKEN_URL, {
+  const response = await reach(OPENSKY_TOKEN_URL, {
     method: 'POST', headers: USER_AGENT, signal: AbortSignal.timeout(TIMEOUT_MS),
     body: new URLSearchParams({ grant_type: 'client_credentials', client_id: id, client_secret: secret })
   })
@@ -118,7 +127,7 @@ export const FEEDS = new Map<string, Feed>([
 ])
 
 const fetchBody = async (url: string, headers: Record<string, string>) => {
-  const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS), headers })
+  const response = await reach(url, { signal: AbortSignal.timeout(TIMEOUT_MS), headers })
   noteRejected(response.status, headers)
   if (!response.ok) throw new Error(`${url} answered ${response.status}`)
   if (Number(response.headers.get('content-length')) > MAX_BYTES) throw new Error(`${url} is too big`)

@@ -1,6 +1,6 @@
 import type { IncomingMessage, OutgoingHttpHeaders, ServerResponse } from 'node:http'
 import { isHttps, securityHeaders } from './files.ts'
-import { EOX, GIBS, USER_AGENT, gibsUrl, jpeg, noteRejected, openskyHeaders } from './feeds.ts'
+import { EOX, GIBS, USER_AGENT, gibsUrl, jpeg, noteRejected, openskyHeaders, reach } from './feeds.ts'
 import { parseAircraft, parseRoute, parseTrack } from '../src/sources.ts'
 
 const ADSBDB = process.env.ADSBDB_URL ?? 'https://api.adsbdb.com/v0'
@@ -44,7 +44,7 @@ const fail = (res: ServerResponse, headers: OutgoingHttpHeaders, status: number,
 }
 
 const getJson = async (url: string, headers: Record<string, string> = USER_AGENT) => {
-  const response = await fetch(url, { signal: AbortSignal.timeout(10_000), headers })
+  const response = await reach(url, { signal: AbortSignal.timeout(10_000), headers })
   noteRejected(response.status, headers)
   if (response.status === 404) return null
   if (!response.ok) throw new Error(`${url} answered ${response.status}`)
