@@ -147,6 +147,52 @@ test('satellites and planes are checked and trimmed before anyone sees them, and
   }
 })
 
+test('with OpenSky keys set, planes are fetched with a login token that is reused until it expires', async () => {
+  const seen: { path: string, auth?: string, body: string }[] = []
+  let revoked = false
+  const opensky = createServer((req, res) => {
+    let body = ''
+    req.on('data', chunk => { body += chunk })
+    req.on('end', () => {
+      seen.push({ path: req.url ?? '', auth: req.headers.authorization, body })
+      if (req.url === '/token') {
+        const ok = new URLSearchParams(body).get('client_secret') === 'right'
+        return res.writeHead(ok ? 200 : 401, { 'content-type': 'application/json' }).end(JSON.stringify({ access_token: 'abc', expires_in: 1800 }))
+      }
+      if (revoked || req.headers.authorization !== 'Bearer abc') return res.writeHead(401).end()
+      res.writeHead(200, { 'content-type': 'application/json' }).end(SKY)
+    })
+  })
+  await new Promise<void>(resolve => opensky.listen(0, resolve))
+  const base = `http://127.0.0.1:${(opensky.address() as AddressInfo).port}`
+  const keys = { PLANES_URL: `${base}/states`, OPENSKY_TOKEN_URL: `${base}/token`, OPENSKY_CLIENT_ID: 'overhead', PLANES_FRESH_MS: '0' }
+  const server = await startServer({ ...keys, OPENSKY_CLIENT_SECRET: 'right' })
+  try {
+    assert.equal((await get(server.port, '/api/planes')).status, 200)
+    await get(server.port, '/api/planes')
+    assert.equal(seen.filter(hit => hit.path === '/token').length, 1, 'one login serves many downloads')
+    assert.match(seen[0].body, /grant_type=client_credentials/)
+    assert.ok(seen.filter(hit => hit.path === '/states').every(hit => hit.auth === 'Bearer abc'))
+    revoked = true
+    await get(server.port, '/api/planes')
+    revoked = false
+    assert.equal((await get(server.port, '/api/planes')).status, 200)
+    assert.equal(seen.filter(hit => hit.path === '/token').length, 2, 'a rejected token makes the next download log in again')
+  } finally {
+    server.stop()
+  }
+  const refused = await startServer({ ...keys, OPENSKY_CLIENT_SECRET: 'wrong' })
+  try {
+    const answer = await get(refused.port, '/api/planes')
+    assert.equal(answer.status, 502)
+    assert.match(answer.body, /OpenSky login answered 401/, 'the reason is reported, never the secret')
+    assert.doesNotMatch(answer.body, /wrong/)
+  } finally {
+    refused.stop()
+    opensky.close()
+  }
+})
+
 test('a restart picks up the last good copy from disk instead of downloading again', async () => {
   const cache = mkdtempSync(join(tmpdir(), 'overhead-'))
   const opensky = await fakeUpstream([() => [200, SKY], () => [503, 'busy']])

@@ -1,6 +1,6 @@
 import type { IncomingMessage, OutgoingHttpHeaders, ServerResponse } from 'node:http'
 import { isHttps, securityHeaders } from './files.ts'
-import { EOX, GIBS, USER_AGENT, gibsUrl, jpeg } from './feeds.ts'
+import { EOX, GIBS, USER_AGENT, gibsUrl, jpeg, noteRejected, openskyHeaders } from './feeds.ts'
 import { parseAircraft, parseRoute, parseTrack } from '../src/sources.ts'
 
 const ADSBDB = process.env.ADSBDB_URL ?? 'https://api.adsbdb.com/v0'
@@ -43,8 +43,9 @@ const fail = (res: ServerResponse, headers: OutgoingHttpHeaders, status: number,
   res.writeHead(status, { ...headers, 'content-type': 'text/plain; charset=utf-8' }).end(text)
 }
 
-const getJson = async (url: string) => {
-  const response = await fetch(url, { signal: AbortSignal.timeout(10_000), headers: USER_AGENT })
+const getJson = async (url: string, headers: Record<string, string> = USER_AGENT) => {
+  const response = await fetch(url, { signal: AbortSignal.timeout(10_000), headers })
+  noteRejected(response.status, headers)
   if (response.status === 404) return null
   if (!response.ok) throw new Error(`${url} answered ${response.status}`)
   const body = await response.text()
@@ -61,7 +62,7 @@ export const servePlane = async (req: IncomingMessage, res: ServerResponse) => {
   const [aircraft, route, track] = await Promise.all([
     remember(`aircraft:${hex}`, DAY, () => getJson(`${ADSBDB}/aircraft/${hex}`).then(parseAircraft)),
     callsign ? remember(`route:${callsign}`, DAY, () => getJson(`${ADSBDB}/callsign/${callsign}`).then(parseRoute)) : null,
-    remember(`track:${hex}`, TRACK_MS, () => getJson(`${OPENSKY}/tracks/all?icao24=${hex}&time=0`).then(parseTrack))
+    remember(`track:${hex}`, TRACK_MS, () => openskyHeaders().then(auth => getJson(`${OPENSKY}/tracks/all?icao24=${hex}&time=0`, auth)).then(parseTrack))
   ])
   res.writeHead(200, { ...headers, 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify({ aircraft, route, track }))
 }
