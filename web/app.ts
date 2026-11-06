@@ -448,7 +448,7 @@ const renderPlanes = () => {
   const age = planesAt ? ` · radar snapshot ${ago(Date.now() - planesAt)}` : ''
   $('#plane-status').textContent = planes.length
     ? `${number(matches.length)} planes${query ? ' found' : ' in the air, nearest first'}${age}. Positions are estimated between snapshots. Click one for its route and path.`
-    : planesState === 'loading' ? 'Loading planes from OpenSky…' : 'OpenSky is not answering. Retrying…'
+    : planesState === 'loading' ? 'Loading planes from adsb.lol…' : 'adsb.lol is not answering. Retrying…'
   fillRows($('#plane-list'), nearestPlanes(LIST_LIMIT, matches).map(({ plane, distance }) => planeRow(plane, distance)), planes.length ? 'Nothing matches.' : '')
 }
 
